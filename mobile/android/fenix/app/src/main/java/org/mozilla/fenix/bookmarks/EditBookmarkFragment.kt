@@ -62,6 +62,7 @@ class EditBookmarkFragment : Fragment(R.layout.fragment_edit_bookmark) {
                             middleware = listOf(
                                 BookmarksMiddleware(
                                     bookmarksStorage = requireContext().bookmarkStorage,
+                                    contentResolver = requireContext().contentResolver,
                                     clipboardManager = requireContext().getSystemService(),
                                     addNewTabUseCase = requireComponents.useCases.tabsUseCases.addTab,
                                     fenixBrowserUseCases = requireComponents.useCases.fenixBrowserUseCases,
@@ -127,6 +128,7 @@ class EditBookmarkFragment : Fragment(R.layout.fragment_edit_bookmark) {
                             toolbarStore = BrowserToolbarStore(BrowserToolbarState(mode = Mode.EDIT)),
                             searchStore = SearchFragmentStore(SearchFragmentState.EMPTY),
                             bookmarksSearchEngine = null,
+                            openImportPicker = {},
                         )
                     }
                 }

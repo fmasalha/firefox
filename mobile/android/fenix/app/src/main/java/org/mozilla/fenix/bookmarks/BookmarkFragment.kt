@@ -4,7 +4,9 @@
 
 package org.mozilla.fenix.bookmarks
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -20,6 +22,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDirections
 import androidx.navigation.NavHostController
 import androidx.navigation.fragment.findNavController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.state.searchEngines
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarState
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarStore
@@ -29,6 +33,7 @@ import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
+import org.mozilla.fenix.bookmarks.importBookmarks.BookmarkHtmlImporter
 import org.mozilla.fenix.components.QrScanFenixFeature
 import org.mozilla.fenix.components.VoiceSearchFeature
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
@@ -53,6 +58,7 @@ import org.mozilla.fenix.search.createInitialSearchFragmentState
 import org.mozilla.fenix.tabstray.Page
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.utils.lastSavedFolderCache
+import org.mozilla.fenix.utils.ActivityResultDocumentPicker
 
 /**
  * The screen that displays the user's bookmark list in their Library.
@@ -74,12 +80,26 @@ class BookmarkFragment : Fragment() {
             voiceSearchFeature?.get()?.handleVoiceSearchResult(result.resultCode, result.data)
         }
 
+
+    private lateinit var bookmarksStore: BookmarksStore
+
+    private val importBookmarksPicker = ActivityResultDocumentPicker(this) { uri ->
+        if (uri != null) {
+            bookmarksStore.dispatch(ImportBookmarksAction.FileChosen(uri))
+        }
+    }
+
+    private fun launchImportPicker() {
+        importBookmarksPicker.open(arrayOf("text/html"))
+    }
+
     @Suppress("LongMethod")
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
+
         return ComposeView(requireContext()).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 val toolbarStore = buildToolbarStore()
@@ -112,6 +132,7 @@ class BookmarkFragment : Fragment() {
                                 BrowserToolbarSyncToBookmarksMiddleware(toolbarStore, lifecycleScope),
                                 BookmarksMiddleware(
                                     bookmarksStorage = requireContext().bookmarkStorage,
+                                    contentResolver = requireContext().contentResolver,
                                     clipboardManager = requireActivity().getSystemService(),
                                     addNewTabUseCase = requireComponents.useCases.tabsUseCases.addTab,
                                     fenixBrowserUseCases = requireComponents.useCases.fenixBrowserUseCases,
@@ -173,7 +194,7 @@ class BookmarkFragment : Fragment() {
                             ),
                         )
                     }
-
+                    bookmarksStore = store
                     store
                 }
                 setContent {
@@ -186,6 +207,7 @@ class BookmarkFragment : Fragment() {
                             bookmarksSearchEngine = requireComponents.core.store.state.search.searchEngines
                                 .firstOrNull { it.id == BOOKMARKS_SEARCH_ENGINE_ID },
                             useNewSearchUX = settings().shouldUseComposableToolbar,
+                            openImportPicker = ::launchImportPicker,
                         )
                     }
                 }
@@ -230,6 +252,8 @@ class BookmarkFragment : Fragment() {
             )
         }.value
     }
+
+
 
     private fun buildSearchStore(
         toolbarStore: BrowserToolbarStore,

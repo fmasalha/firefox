@@ -46,9 +46,12 @@ internal class BookmarksTelemetryMiddleware : Middleware<BookmarksState, Bookmar
                 BookmarksManagement.searchIconTapped.record(NoExtras())
             }
             is BookmarksListMenuAction.SortMenu -> action.record()
+            is ImportBookmarksAction.FileChosen,
+            is ImportBookmarksAction.ImportCompleted,
             SelectFolderAction.SearchClicked,
             SelectFolderAction.SearchDismissed,
             is SelectFolderAction.SearchQueryUpdated,
+            ImportClicked,
             CloseClicked,
             AddFolderClicked,
             is SelectFolderAction.SortMenu,
@@ -88,6 +91,8 @@ internal class BookmarksTelemetryMiddleware : Middleware<BookmarksState, Bookmar
             ViewDisposed,
             PrivateBrowsingAuthorized,
             -> Unit
+
+
         }
     }
 

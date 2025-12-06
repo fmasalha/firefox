@@ -131,6 +131,7 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.bookmarks.BookmarksTestTag.BOOKMARK_TOOLBAR
 import org.mozilla.fenix.bookmarks.BookmarksTestTag.EDIT_BOOKMARK_ITEM_TITLE_TEXT_FIELD
 import org.mozilla.fenix.bookmarks.BookmarksTestTag.EDIT_BOOKMARK_ITEM_URL_TEXT_FIELD
+import org.mozilla.fenix.bookmarks.importBookmarks.ImportBookmarksScreen
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.components
@@ -160,6 +161,7 @@ private const val MATERIAL_DESIGN_SCRIM = "#52000000"
  * @param useNewSearchUX Whether to use the new integrated search UX or navigate to a separate search screen.
  * @param profiler app profiler used to access firefox profile features.
  * @param startDestination the screen on which to initialize [BookmarksScreen] with.
+ * @param openImportPicker Callback to open the system document picker for bookmark imports.
  */
 @Composable
 internal fun BookmarksScreen(
@@ -172,6 +174,7 @@ internal fun BookmarksScreen(
     useNewSearchUX: Boolean = false,
     profiler: Profiler? = components.core.engine.profiler,
     startDestination: String = BookmarksDestinations.LIST,
+    openImportPicker: () -> Unit,
 ) {
     val navController = rememberNavController()
     val store = buildStore(navController)
@@ -225,6 +228,13 @@ internal fun BookmarksScreen(
             BackHandler { store.dispatch(BackClicked) }
             SelectFolderScreen(store = store)
         }
+        composable(route = BookmarksDestinations.IMPORT_BOOKMARK) {
+            BackHandler { store.dispatch(BackClicked) }
+            ImportBookmarksScreen(
+                onPickRequested = openImportPicker,
+                onBack = { store.dispatch(BackClicked) },
+            )
+        }
     }
 }
 
@@ -234,6 +244,8 @@ internal object BookmarksDestinations {
     const val EDIT_FOLDER = "edit folder"
     const val EDIT_BOOKMARK = "edit bookmark"
     const val SELECT_FOLDER = "select folder"
+
+    const val IMPORT_BOOKMARK = "import folder"
 }
 
 /**
@@ -1354,6 +1366,15 @@ private fun EmptyList(
                         .heightIn(36.dp)
                         .fillMaxWidth(),
                 )
+                Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static300))
+
+                FilledButton(
+                    text = "Import Bookmarks",
+                    onClick = { dispatcher(ImportClicked) },
+                    modifier = Modifier
+                        .heightIn(36.dp)
+                        .fillMaxWidth(),
+                )
             }
         }
     }
@@ -2064,6 +2085,7 @@ private fun BookmarksScreenPreview() {
             searchStore = SearchFragmentStore(SearchFragmentState.EMPTY),
             bookmarksSearchEngine = null,
             profiler = null,
+            openImportPicker = {},
         )
     }
 }
@@ -2109,6 +2131,7 @@ private fun EmptyBookmarksScreenPreview() {
             searchStore = SearchFragmentStore(SearchFragmentState.EMPTY),
             bookmarksSearchEngine = null,
             profiler = null,
+            openImportPicker = {},
         )
     }
 }

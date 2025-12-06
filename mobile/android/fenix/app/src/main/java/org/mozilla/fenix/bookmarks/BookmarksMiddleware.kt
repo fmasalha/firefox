@@ -6,6 +6,8 @@ package org.mozilla.fenix.bookmarks
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.navigation.NavController
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +23,7 @@ import mozilla.components.concept.storage.BookmarksStorage
 import mozilla.components.feature.tabs.TabsUseCases
 import mozilla.components.lib.state.Middleware
 import mozilla.components.lib.state.Store
+import org.mozilla.fenix.bookmarks.importBookmarks.BookmarkHtmlImporter
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.components.usecases.FenixBrowserUseCases
 import org.mozilla.fenix.utils.LastSavedFolderCache
@@ -55,6 +58,7 @@ private const val WARN_OPEN_ALL_SIZE = 15
 @Suppress("LongParameterList", "LargeClass")
 internal class BookmarksMiddleware(
     private val bookmarksStorage: BookmarksStorage,
+    private val contentResolver: ContentResolver,
     private val clipboardManager: ClipboardManager?,
     private val addNewTabUseCase: TabsUseCases.AddNewTabUseCase,
     private val fenixBrowserUseCases: FenixBrowserUseCases,
@@ -153,6 +157,10 @@ internal class BookmarksMiddleware(
             AddFolderClicked -> getNavController().navigate(BookmarksDestinations.ADD_FOLDER)
             CloseClicked -> exitBookmarks()
             SignIntoSyncClicked -> navigateToSignIntoSync()
+
+            ImportClicked -> {
+                getNavController().navigate(BookmarksDestinations.IMPORT_BOOKMARK)
+            }
             is EditBookmarkClicked -> getNavController().navigate(BookmarksDestinations.EDIT_BOOKMARK)
             BackClicked -> {
                 when {
@@ -417,6 +425,40 @@ internal class BookmarksMiddleware(
                         }
                     filteredFolders?.let {
                         store.dispatch(SelectFolderAction.FilteredFoldersLoaded(it))
+                    }
+                }
+            }
+            is ImportBookmarksAction -> when (action) {
+                is ImportBookmarksAction.ImportCompleted -> {
+                    store.tryDispatchLoadFor(action.parentGuid)
+                }
+                is ImportBookmarksAction.FileChosen -> {
+                    scope.launch {
+                        val importer = BookmarkHtmlImporter(bookmarksStorage, contentResolver)
+                        val result = importer.importFromUri(action.uri)
+                        if (result != null) {
+                            withContext(Dispatchers.Main) {
+                                store.dispatch(ImportBookmarksAction.ImportCompleted(BookmarkRoot.Mobile.id))
+                                store.dispatch(BackClicked)
+                            }
+                        }
+//                        val fileContent = readContentFromUri(action.uri)
+//                        if (fileContent != null) {
+//                            val parentGuid = BookmarkRoot.Mobile.id
+//                            val importer = BookmarkHtmlImporter(bookmarksStorage)
+//                            val result = withContext(ioDispatcher) {
+//                                importer.importHtml(
+//                                    html = fileContent,
+//                                    parentGuid = parentGuid,
+//                                )
+//                            }
+//                            if (result.isSuccess) {
+//                                withContext(Dispatchers.Main) {
+//                                    store.dispatch(ImportBookmarksAction.ImportCompleted(parentGuid))
+//                                    store.dispatch(BackClicked)
+//                                }
+//                            }
+//                        }
                     }
                 }
             }

@@ -65,6 +65,9 @@ internal fun bookmarksReducer(state: BookmarksState, action: BookmarksAction) = 
     is ReceivedSyncSignInUpdate -> {
         state.copy(isSignedIntoSync = action.isSignedIn)
     }
+    is ImportBookmarksAction.FileChosen,
+    is ImportBookmarksAction.ImportCompleted,
+    ImportClicked,
     CloseClicked,
     FirstSyncCompleted,
     ViewDisposed,
