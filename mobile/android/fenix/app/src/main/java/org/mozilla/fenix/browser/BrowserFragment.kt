@@ -93,6 +93,10 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     private var translationsAvailable = false
 
     private var pwaOnboardingObserver: PwaOnboardingObserver? = null
+    private var zoomOutActivationTriggered = false
+    private var zoomOutActivationListenerAdded = false
+    private var pinchZoomFactor = 1f
+    private var readerModeActive = false
 
     @VisibleForTesting
     internal var homeAction: BrowserToolbar.Button? = null
@@ -168,6 +172,49 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 view = view,
             )
         }
+
+        initZoomOutActivation()
+    }
+
+    private fun initZoomOutActivation() {
+        if (zoomOutActivationListenerAdded) {
+            return
+        }
+        zoomOutActivationListenerAdded = true
+
+        binding.gestureLayout.addPinchGestureListener(
+            object : PinchGestureListener {
+                override fun onPinch(scaleFactor: Float) {
+                    pinchZoomFactor = (pinchZoomFactor * scaleFactor).coerceIn(
+                        MIN_PINCH_ZOOM_FACTOR,
+                        MAX_PINCH_ZOOM_FACTOR,
+                    )
+
+                    val shouldTrigger = pinchZoomFactor <= ZOOM_OUT_ACTIVATION_THRESHOLD
+                    if (shouldTrigger && !zoomOutActivationTriggered) {
+                        zoomOutActivationTriggered = true
+                        onZoomOutActivationTriggered()
+                    } else if (!shouldTrigger && zoomOutActivationTriggered) {
+                        zoomOutActivationTriggered = false
+                    }
+                }
+            },
+        )
+    }
+
+    private fun onZoomOutActivationTriggered() {
+        val tabId = getSafeCurrentTab()?.id ?: return
+        val readerState = requireContext().components.core.store.state.findTab(tabId)?.readerState ?: return
+        if (readerState.readerable && !readerState.active) {
+            browserToolbarInteractor.onReaderModePressed(true)
+        }
+    }
+
+    private fun onReaderModeActiveChanged(active: Boolean) {
+        if (readerModeActive && !active) {
+            zoomOutActivationTriggered = false
+        }
+        readerModeActive = active
     }
 
     private fun initBrowserToolbarViewActions(rootView: View) {
@@ -278,6 +325,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                     browserScreenStore.dispatch(
                         ReaderModeStatusUpdated(ReaderModeStatus(available, active)),
                     )
+                    onReaderModeActiveChanged(active)
                 }
             },
             owner = this,
@@ -366,6 +414,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                     readerModeAvailable = available
                     readerModeAction.setSelected(active)
                     safeInvalidateBrowserToolbarView()
+                    onReaderModeActiveChanged(active)
                 }
             },
             owner = this,
@@ -586,6 +635,10 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         forwardAction = null
         backAction = null
         refreshAction = null
+        zoomOutActivationListenerAdded = false
+        zoomOutActivationTriggered = false
+        pinchZoomFactor = 1f
+        readerModeActive = false
     }
 
     private fun updateHistoryMetadata() {
@@ -730,6 +783,10 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     }
 
     companion object {
+        private const val ZOOM_OUT_ACTIVATION_THRESHOLD = 1f / 1.5f
+        private const val MIN_PINCH_ZOOM_FACTOR = 0.25f
+        private const val MAX_PINCH_ZOOM_FACTOR = 4f
+
         /**
          * Indicates weight of a page action. The lesser the weight, the closer it is to the URL.
          *
