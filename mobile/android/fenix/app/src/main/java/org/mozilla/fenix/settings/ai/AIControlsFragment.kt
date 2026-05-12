@@ -9,14 +9,17 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.fragment.app.Fragment
 import androidx.fragment.compose.content
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import kotlinx.coroutines.launch
 import mozilla.components.lib.state.helpers.StoreProvider.Companion.navBackStackStore
+import mozilla.components.lib.state.helpers.StoreProvider.Companion.storeProvider
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.GenaiAiControls
 import org.mozilla.fenix.R
@@ -56,10 +59,14 @@ class AIControlsFragment : Fragment(), SystemInsetsPaddedFragment {
         val showDialog = aiBlockUiController.showDialogFlow.collectAsState()
         val isBlocked = featureBlock.isBlocked.collectAsState(initial = false)
 
-        val settingsStore: SettingsStore by findNavController().currentBackStackEntry!!.navBackStackStore(
-            initialState = SettingsState(),
-            factory = { SettingsStore(SettingsState(), ::settingsReducer, middleware = listOf()) }
-        )
+        val navController = findNavController()
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val settingsStore: SettingsStore = remember(navBackStackEntry) {
+            navController.getBackStackEntry(R.id.settingsFragment)
+                .storeProvider.get<SettingsState, SettingsStore> { persistedState ->
+                    SettingsStore(persistedState ?: SettingsState(), ::settingsReducer, middleware = listOf())
+                }
+        }
         val settingsState = settingsStore.stateFlow.collectAsState()
 
         FirefoxTheme {

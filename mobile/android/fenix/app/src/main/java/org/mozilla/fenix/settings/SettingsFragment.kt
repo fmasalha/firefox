@@ -48,6 +48,7 @@ import mozilla.components.lib.state.State
 import mozilla.components.lib.state.Middleware
 import mozilla.components.lib.state.Store
 import mozilla.components.lib.state.helpers.StoreProvider.Companion.navBackStackStore
+import mozilla.components.lib.state.helpers.StoreProvider.Companion.storeProvider
 import mozilla.components.service.fxrelay.eligibility.Eligible
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.ktx.android.view.showKeyboard
@@ -192,9 +193,16 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
 
         components = requireContext().components
 
+        val settingsOwner = findNavController().getBackStackEntry(R.id.settingsFragment)
         val settingsStore: SettingsStore by findNavController().currentBackStackEntry!!.navBackStackStore(
             initialState = SettingsState(),
-            factory = { SettingsStore(SettingsState(), ::settingsReducer, middleware = listOf(SettingsMiddleware(components.aiFeatureRegistry, lifecycleScope))) }
+            factory = {
+                SettingsStore(
+                    initialState = SettingsState(),
+                    reducer = ::settingsReducer,
+                    middleware = listOf(SettingsMiddleware(components.aiFeatureRegistry, settingsOwner.lifecycleScope))
+                )
+            }
         )
         settingsStore.dispatch(SettingsAction.SettingsViewCreated)
 
