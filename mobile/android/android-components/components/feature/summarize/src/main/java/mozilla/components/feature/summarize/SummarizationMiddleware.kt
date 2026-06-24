@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import mozilla.components.concept.llm.AttestationFailure
 import mozilla.components.concept.llm.CloudLlmProvider
 import mozilla.components.concept.llm.Llm
 import mozilla.components.feature.summarize.content.ContentProvider
@@ -26,7 +27,12 @@ import kotlin.time.Duration.Companion.seconds
 
 const val TAG = "SummarizationMiddleware"
 
-/** The initial middleware for the summarization feature */
+/**
+ * The initial middleware for the summarization feature.
+ *
+ * @property llmProvider The cloud provider used to source a summarization [Llm]. A token is renewed
+ * by preparing the provider when it does not already hold a usable one.
+ */
 class SummarizationMiddleware(
     private val settings: SummarizationSettings,
     private val llmProvider: CloudLlmProvider,
@@ -46,7 +52,7 @@ class SummarizationMiddleware(
                 if (needsShakeConsent(store.state)) {
                     store.dispatch(ShakeConsentRequested)
                 } else {
-                    observeCloudLlmProvider(store, llmProvider)
+                    observeCloudLlmProvider(store)
                 }
             }
             OffDeviceSummarizationShakeConsentAction.CancelClicked -> scope.launch {
@@ -54,7 +60,14 @@ class SummarizationMiddleware(
             }
             OffDeviceSummarizationShakeConsentAction.AllowClicked -> scope.launch {
                 settings.setHasConsentedToShake(true)
-                observeCloudLlmProvider(store, llmProvider)
+                observeCloudLlmProvider(store)
+            }
+            LlmProviderAction.ProviderPreparationRequired -> scope.launch {
+                llmProvider.prepare()
+                val state = llmProvider.state.value
+                if (state is CloudLlmProvider.State.Unavailable && state.exception is AttestationFailure) {
+                    store.dispatch(LlmProviderAction.SignInRequired)
+                }
             }
             LlmProviderAction.ProviderAvailable -> scope.launch {
                 llmProvider.prepare()
@@ -95,10 +108,9 @@ class SummarizationMiddleware(
         }
     }
 
-    private suspend fun observeCloudLlmProvider(
-        store: SummarizationStore,
-        llmProvider: CloudLlmProvider,
-    ) = llmProvider.fetchLlm.collect { store.dispatch(it) }
+    private suspend fun observeCloudLlmProvider(store: SummarizationStore) {
+        llmProvider.fetchLlm.collect { store.dispatch(it) }
+    }
 
     private suspend fun needsShakeConsent(state: SummarizationState): Boolean =
         state is SummarizationState.Inert &&

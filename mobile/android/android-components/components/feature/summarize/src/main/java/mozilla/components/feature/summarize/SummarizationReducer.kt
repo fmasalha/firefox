@@ -15,10 +15,15 @@ import mozilla.components.ui.richtext.ir.RichDocument
  */
 fun summarizationReducer(state: SummarizationState, action: SummarizationAction) = when (action) {
     is ShakeConsentRequested -> SummarizationState.ShakeConsentRequired
-    OffDeviceSummarizationShakeConsentAction.CancelClicked -> SummarizationState.Finished.Cancelled
+    SignInSummarizationContentAction.DismissClicked,
+    OffDeviceSummarizationShakeConsentAction.CancelClicked,
+    -> SummarizationState.Finished.Cancelled
+    SignInSummarizationContentAction.LearnMoreClicked -> SummarizationState.LearnMoreAboutCloudSupportedFeatures
+    SignInSummarizationContentAction.SignInClicked -> SummarizationState.Finished.NavigatedToSignIn
     OffDeviceSummarizationShakeConsentAction.LearnMoreClicked -> SummarizationState.LearnMoreAboutShakeConsent
     OnDeviceSummarizationShakeConsentAction.LearnMoreClicked -> SummarizationState.LearnMoreAboutShakeConsent
     ErrorAction.ErrorDismissed -> SummarizationState.Finished.ErrorDismissed
+    LlmProviderAction.SignInRequired -> SummarizationState.SignInRequired
     is SummarizationRequested -> SummarizationState.Loading(action.info)
     is SummarizationCompleted -> state.complete()
     is SummarizationFailed -> SummarizationState.Error(SummarizationError.SummarizationFailed(action.exception))

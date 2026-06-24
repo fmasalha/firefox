@@ -4,9 +4,11 @@
 
 package mozilla.components.feature.summarize.ext
 
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import mozilla.components.concept.llm.AttestationFailure
 import mozilla.components.concept.llm.CloudLlmProvider
 import mozilla.components.feature.summarize.LlmProviderAction
 import mozilla.components.feature.summarize.SummarizationFailed
@@ -14,11 +16,15 @@ import mozilla.components.feature.summarize.SummarizationRequested
 
 internal val CloudLlmProvider.fetchLlm get() = flow {
     emit(SummarizationRequested(info))
-    emitAll(state.map { it.action })
+    emitAll(state.map { it.action }.distinctUntilChanged())
 }
 
 internal val CloudLlmProvider.State.action get() = when (this) {
     CloudLlmProvider.State.Available -> LlmProviderAction.ProviderAvailable
     is CloudLlmProvider.State.Ready -> LlmProviderAction.ProviderInitialized(llm)
-    is CloudLlmProvider.State.Unavailable -> SummarizationFailed(exception)
+    is CloudLlmProvider.State.Unavailable -> if (exception is AttestationFailure) {
+        LlmProviderAction.ProviderPreparationRequired
+    } else {
+        SummarizationFailed(exception)
+    }
 }

@@ -8,12 +8,14 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import mozilla.components.concept.llm.AttestationFailure
 import mozilla.components.concept.llm.CloudLlmProvider
 import mozilla.components.concept.llm.Llm
 import mozilla.components.concept.llm.Prompt
@@ -26,7 +28,6 @@ import mozilla.components.feature.summarize.SummarizationState.Summarized
 import mozilla.components.feature.summarize.SummarizationState.Summarizing
 import mozilla.components.feature.summarize.content.Content
 import mozilla.components.feature.summarize.content.ContentProvider
-import mozilla.components.feature.summarize.content.PageContentExtractor
 import mozilla.components.feature.summarize.content.PageMetadata
 import mozilla.components.feature.summarize.ext.defaultInstructions
 import mozilla.components.feature.summarize.ext.recipeInstructions
@@ -40,6 +41,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import kotlin.time.Duration.Companion.seconds
+
+private class FakeAttestationFailure : Llm.Exception("attestation failed"), AttestationFailure
 
 class SummarizationStoreTest {
 
@@ -634,5 +637,183 @@ class SummarizationStoreTest {
             Error(SummarizationError.SummarizationFailed(exception)),
         )
         assertEquals(expected, states)
+    }
+
+    @Test
+    fun `clicking sign in navigates to sign in and finishes the flow`() = runTest {
+        val provider = FakeCloudProvider(preparedState = CloudLlmProvider.State.Ready(FakeLlm.successful))
+        val store = SummarizationStore(
+            initialState = Inert(false),
+            reducer = ::summarizationReducer,
+            middleware = listOf(
+                SummarizationMiddleware(
+                    settings = SummarizationSettings.inMemory(),
+                    llmProvider = provider,
+                    contentProvider = { Result.success(Content()) },
+                    errorReporter = noopReporter,
+                    scope = backgroundScope,
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                ),
+            ),
+        )
+
+        val states = mutableListOf<SummarizationState>()
+        backgroundScope.launch {
+            store.stateFlow.toList(states)
+        }
+        testScheduler.advanceTimeBy(1.seconds)
+
+        store.dispatch(SignInSummarizationContentAction.SignInClicked)
+        testScheduler.advanceTimeBy(1.seconds)
+
+        assertEquals(listOf<SummarizationState>(Inert(false), Finished.NavigatedToSignIn), states)
+    }
+
+    @Test
+    fun `dismissing the sign in content cancels the flow`() = runTest {
+        val provider = FakeCloudProvider(preparedState = CloudLlmProvider.State.Ready(FakeLlm.successful))
+        val store = SummarizationStore(
+            initialState = Inert(false),
+            reducer = ::summarizationReducer,
+            middleware = listOf(
+                SummarizationMiddleware(
+                    settings = SummarizationSettings.inMemory(),
+                    llmProvider = provider,
+                    contentProvider = { Result.success(Content()) },
+                    errorReporter = noopReporter,
+                    scope = backgroundScope,
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                ),
+            ),
+        )
+
+        val states = mutableListOf<SummarizationState>()
+        backgroundScope.launch {
+            store.stateFlow.toList(states)
+        }
+        testScheduler.advanceTimeBy(1.seconds)
+
+        store.dispatch(SignInSummarizationContentAction.DismissClicked)
+        testScheduler.advanceTimeBy(1.seconds)
+
+        assertEquals(listOf<SummarizationState>(Inert(false), Finished.Cancelled), states)
+    }
+
+    @Test
+    fun `clicking learn more on the sign in content requests the cloud supported features page`() = runTest {
+        val provider = FakeCloudProvider(preparedState = CloudLlmProvider.State.Ready(FakeLlm.successful))
+        val store = SummarizationStore(
+            initialState = Inert(false),
+            reducer = ::summarizationReducer,
+            middleware = listOf(
+                SummarizationMiddleware(
+                    settings = SummarizationSettings.inMemory(),
+                    llmProvider = provider,
+                    contentProvider = { Result.success(Content()) },
+                    errorReporter = noopReporter,
+                    scope = backgroundScope,
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                ),
+            ),
+        )
+
+        val states = mutableListOf<SummarizationState>()
+        backgroundScope.launch {
+            store.stateFlow.toList(states)
+        }
+        testScheduler.advanceTimeBy(1.seconds)
+
+        store.dispatch(SignInSummarizationContentAction.LearnMoreClicked)
+        testScheduler.advanceTimeBy(1.seconds)
+
+        assertEquals(
+            listOf<SummarizationState>(Inert(false), SummarizationState.LearnMoreAboutCloudSupportedFeatures),
+            states,
+        )
+    }
+
+    @Test
+    fun `if the provider is unavailable due to an attestation failure, the provider is re-prepared and summarization proceeds`() = runTest {
+        val llm = FakeLlm.successful
+        val content = "this is expected content."
+        val pageTitle = "Article Headline"
+        val provider = FakeCloudProvider(
+            state = MutableStateFlow(CloudLlmProvider.State.Unavailable(FakeAttestationFailure())),
+            preparedState = CloudLlmProvider.State.Ready(llm),
+        )
+        val store = SummarizationStore(
+            initialState = Inert(false),
+            reducer = ::summarizationReducer,
+            middleware = listOf(
+                SummarizationMiddleware(
+                    settings = SummarizationSettings.inMemory(),
+                    llmProvider = provider,
+                    contentProvider = { Result.success(Content(PageMetadata(listOf("Article"), 0, "en", pageTitle = pageTitle), content)) },
+                    errorReporter = noopReporter,
+                    scope = backgroundScope,
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                ),
+            ),
+        )
+
+        val states = mutableListOf<SummarizationState>()
+        backgroundScope.launch {
+            store.stateFlow.toList(states)
+        }
+        testScheduler.advanceTimeBy(1.seconds)
+
+        store.dispatch(ViewAppeared)
+        testScheduler.advanceTimeBy(15.seconds)
+
+        val expected = listOf<SummarizationState>(
+            Inert(false),
+            Loading(provider.info),
+            Summarizing(provider.info, parser.parse("# $pageTitle\nThis is the article\n")),
+            Summarizing(provider.info, parser.parse("# $pageTitle\nThis is the article\nThis is some content...\n")),
+            Summarizing(provider.info, parser.parse("# $pageTitle\nThis is the article\nThis is some content...\nThis is some *bold* content.\n")),
+            Summarized(provider.info, parser.parse("# $pageTitle\nThis is the article\nThis is some content...\nThis is some *bold* content.\n")),
+        )
+
+        assertEquals(expected, states)
+        assertTrue(provider.state.value is CloudLlmProvider.State.Ready)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `if the provider is unavailable for a non-attestation reason, the failure is surfaced without re-preparing`() = runTest {
+        val exception = Llm.Exception("token expired")
+        val provider = FakeCloudProvider(
+            state = MutableStateFlow(CloudLlmProvider.State.Unavailable(exception)),
+            preparedState = CloudLlmProvider.State.Ready(FakeLlm.successful),
+        )
+        val store = SummarizationStore(
+            initialState = Inert(false),
+            reducer = ::summarizationReducer,
+            middleware = listOf(
+                SummarizationMiddleware(
+                    settings = SummarizationSettings.inMemory(),
+                    llmProvider = provider,
+                    contentProvider = { Result.success(Content()) },
+                    errorReporter = errorReporter,
+                    scope = backgroundScope,
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                ),
+            ),
+        )
+
+        val states = mutableListOf<SummarizationState>()
+        backgroundScope.launch {
+            store.stateFlow.toList(states)
+        }
+
+        store.dispatch(ViewAppeared)
+        testScheduler.runCurrent()
+
+        val expected = listOf<SummarizationState>(
+            Inert(false),
+            Error(SummarizationError.SummarizationFailed(exception)),
+        )
+        assertEquals(expected, states)
+        assertTrue(provider.state.value is CloudLlmProvider.State.Unavailable)
     }
 }

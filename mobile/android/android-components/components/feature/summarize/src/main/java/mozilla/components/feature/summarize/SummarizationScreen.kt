@@ -206,6 +206,12 @@ private fun SummarizationScreenContent(
             }
         }
 
+        is SummarizationState.SignInRequired -> {
+            FxaSignInContent(
+                dispatchAction = { store.dispatch(it) },
+            )
+        }
+
         is SummarizationState.Error -> {
             when (val error = state.error) {
                 is SummarizationError.DownloadFailed -> DownloadError()

@@ -36,6 +36,12 @@ sealed interface LlmProviderAction : SummarizationAction {
     /** The LLM provider has been made available */
     data object ProviderAvailable : LlmProviderAction
 
+    /** The LLM provider needs to be prepared */
+    data object ProviderPreparationRequired : LlmProviderAction
+
+    /** Preparing failed because the user must sign in; drives the sign-in UI. */
+    data object SignInRequired : LlmProviderAction
+
     /** The LLM provider finished initializing with the given [llm]. */
     data class ProviderInitialized(val llm: Llm) : LlmProviderAction
 }
