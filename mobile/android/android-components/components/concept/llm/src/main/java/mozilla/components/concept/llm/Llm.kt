@@ -29,6 +29,9 @@ interface CloudFailure
 /** The request body or content exceeded what the service accepts. */
 interface RequestTooLarge : CloudFailure
 
+/** Integrity check failed; the response could not be trusted. */
+interface AttestationFailure : CloudFailure
+
 /**
  * Rate or token limit hit.
  *
